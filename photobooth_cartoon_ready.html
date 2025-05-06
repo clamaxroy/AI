@@ -1,0 +1,107 @@
+
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <title>Photobooth AI - Cartoon</title>
+  <style>
+    body { font-family: Arial; text-align: center; background: #f0f0f0; padding: 40px; }
+    input, button { margin: 10px; padding: 10px; font-size: 16px; }
+    button { background-color: #0078D7; color: white; border: none; border-radius: 5px; }
+    button:hover { background-color: #005fa3; }
+    img { margin-top: 20px; max-width: 80%; border: 4px solid #ccc; border-radius: 10px; }
+    #output { margin-top: 20px; font-weight: bold; }
+  </style>
+</head>
+<body>
+
+  <h1>🎨 Trasforma la tua foto in stile Cartoon</h1>
+  <p>Carica un'immagine e ottieni una versione cartoonizzata!</p>
+  <input type="file" id="imageInput" accept="image/*"><br>
+  <button onclick="convertToCartoon()">🎨 Trasforma in Cartoon</button>
+  <div id="output">Nessuna immagine generata.</div>
+
+  <script>
+    async function convertToCartoon() {
+      const output = document.getElementById("output");
+      const fileInput = document.getElementById("imageInput");
+      const file = fileInput.files[0];
+
+      if (!file) {
+        alert("Carica un'immagine.");
+        return;
+      }
+
+      output.innerHTML = "⏳ Caricamento immagine su Imgur...";
+
+      const formData = new FormData();
+      formData.append("image", file);
+
+      const imgurResp = await fetch("https://api.imgur.com/3/image", {
+        method: "POST",
+        headers: { Authorization: "Client-ID 546c137c144574f" },
+        body: formData
+      });
+      const imgurData = await imgurResp.json();
+
+      if (!imgurData.success) {
+        output.innerHTML = "❌ Errore durante il caricamento su Imgur.";
+        return;
+      }
+
+      const imageUrl = imgurData.data.link;
+      output.innerHTML = "🔄 Immagine caricata. Invio al modello AI...";
+
+      try {
+        const replicateResp = await fetch("https://api.replicate.com/v1/predictions", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": "Token r8_9uxEQgU0mddadItxMz1Oke95KHoLwdy3JLL91"
+          },
+          body: JSON.stringify({
+            version: "c508f99b4c59cd057d6b37b69db31d7f23b0f209672c46f5f8c0a90299c2e3e8",
+            input: { image: imageUrl }
+          })
+        });
+
+        const prediction = await replicateResp.json();
+        if (prediction.error) {
+          output.innerHTML = "❌ Errore API: " + prediction.error.message;
+          console.error("Errore API:", prediction.error);
+          return;
+        }
+
+        const predictionId = prediction.id;
+        output.innerHTML = "🧠 Elaborazione AI in corso...";
+
+        let outputUrl = null;
+        while (!outputUrl) {
+          await new Promise(res => setTimeout(res, 2000));
+          const poll = await fetch(`https://api.replicate.com/v1/predictions/${predictionId}`, {
+            headers: { "Authorization": "Token r8_9uxEQgU0mddadItxMz1Oke95KHoLwdy3JLL91" }
+          });
+          const result = await poll.json();
+          if (result.status === "succeeded") {
+            outputUrl = result.output;
+          } else if (result.status === "failed") {
+            output.innerHTML = "❌ Errore durante la generazione dell'immagine.";
+            console.error("Errore di generazione:", result);
+            return;
+          }
+        }
+
+        output.innerHTML = `
+          <h3>✅ Immagine cartoon generata:</h3>
+          <img src="${outputUrl}" alt="Cartoon AI">
+          <br><a href="${outputUrl}" download="cartoon.png">📥 Scarica immagine</a>
+        `;
+      } catch (error) {
+        output.innerHTML = "❌ Errore di connessione o nella richiesta: " + error.message;
+        console.error("Errore fetch:", error);
+      }
+    }
+  </script>
+
+</body>
+</html>
